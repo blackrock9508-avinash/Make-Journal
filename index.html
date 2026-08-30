@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Make Journal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body><div class="cinema-noise"></div><div class="cinema-glow glow-a"></div><div class="cinema-glow glow-b"></div><div class="cinema-grid"></div>
+<div id="setupOverlay" class="overlay hidden">
+  <div class="setup-card">
+    <div class="brand-mark">MJ</div>
+    <h1>Set up your Make Journal</h1>
+    <p class="muted">Set your account details once. You can change them later from Settings.</p>
+    <form id="setupForm">
+      <label>Initial Capital<input id="setupCapital" type="number" min="0.01" step="0.01" required placeholder="5000"></label>
+      <label>Account Currency
+        <select id="setupCurrency">
+          <option>USD</option><option>INR</option><option>EUR</option><option>GBP</option><option>USDT</option><option>AUD</option><option>CAD</option><option>JPY</option>
+        </select>
+      </label>
+      <label>Trading Type
+        <select id="setupMarket"><option>Forex</option><option>Crypto</option><option>Stocks</option><option>Index</option><option>Commodities</option><option>Options</option><option>Other</option></select>
+      </label>
+      <button class="primary wide">Start Journal</button>
+    </form>
+  </div>
+</div>
+
+<button id="mobileMoreToggle" type="button" aria-label="Open More menu" aria-expanded="false"><span></span><span></span><span></span></button><div id="mobileMorePanel" class="mobile-more-panel" aria-hidden="true"><div class="more-title"><span>Navigate</span><button id="closeMore" type="button">×</button></div><div class="more-grid"></div></div><button id="floatingTrade" class="floating-trade" type="button" aria-label="New Trade"><span>+</span><b>Trade</b></button><div class="app-shell">
+<aside class="sidebar">
+  <div class="logo"><img src="make-journal-logo.png" alt="Make Journal Trades logo"><div><strong>Make Journal</strong><small>Track. Analyze. Improve</small></div></div>
+  <nav>
+    <button data-page="dashboard" class="nav-btn active">⌂ <span>Dashboard</span></button>
+    <button data-page="calendar" class="nav-btn">▦ <span>Calendar</span></button>
+    <button data-page="analytics" class="nav-btn">◒ <span>Analytics</span></button>
+    <button data-page="reports" class="nav-btn">▤ <span>Reports</span></button>
+<button data-page="about" class="nav-btn">◉ <span>About Developer</span></button>
+  </nav>
+  <div class="sidebar-bottom">
+    <button data-page="settings" class="nav-btn">⚙ <span>Settings</span></button>
+  </div>
+</aside>
+
+<main class="main">
+<header class="topbar">
+  <div><div class="eyebrow">Make Journal</div><h2 id="pageTitle">Dashboard</h2></div>
+  <button id="quickTrade" class="primary">＋ New Trade</button>
+</header>
+
+<section id="dashboard" class="page active">
+  <div class="hero-grid">
+    <div class="hero-card">
+      <div><span class="label">Current Balance</span><strong id="currentBalance">—</strong><span id="totalPnl" class="positive">—</span></div>
+      <div class="hero-actions"><button class="ghost" data-page-jump="calendar">Open Calendar</button><button class="ghost" data-page-jump="reports">View Reports</button></div>
+    </div>
+    <div class="stat-card"><span>Initial Capital</span><strong id="initialCapital">—</strong><small id="returnPct">—</small></div>
+    <div class="stat-card"><span>Total Trades</span><strong id="totalTrades">0</strong><small id="tradingDays">0 trading days</small></div>
+  </div>
+  <div class="stats-grid">
+    <div class="metric"><span>Win Rate</span><strong id="winRate">0%</strong><small id="winCount">0 wins</small></div>
+    <div class="metric"><span>Loss Rate</span><strong id="lossRate">0%</strong><small id="lossCount">0 losses</small></div>
+    <div class="metric"><span>Breakeven</span><strong id="beRate">0%</strong><small id="beCount">0 BE</small></div>
+    <div class="metric"><span>Gross Profit</span><strong id="grossProfit">—</strong></div>
+    <div class="metric"><span>Gross Loss</span><strong id="grossLoss">—</strong></div>
+    <div class="metric"><span>Max Drawdown</span><strong id="maxDrawdown">—</strong></div>
+  </div>
+  <div class="two-col">
+    <div class="panel"><div class="panel-head"><div><h3>Equity Curve</h3><p>Balance progression from initial capital</p></div></div><canvas id="equityCanvas"></canvas></div>
+    <div class="panel"><div class="panel-head"><div><h3>Recent Trades</h3><p>Latest recorded trades</p></div><button class="text-btn" data-page-jump="calendar">View all</button></div><div id="recentTrades" class="trade-list"></div></div>
+  </div>
+</section>
+
+<section id="calendar" class="page">
+  <div class="section-head"><div><h3>Trading Calendar</h3><p>Only dates with saved journal entries appear in history.</p></div><button id="todayBtn" class="ghost">Today</button></div>
+  <div class="calendar-layout">
+    <div class="panel calendar-panel">
+      <div class="calendar-head"><button id="prevMonth" class="icon-btn">‹</button><h3 id="monthLabel"></h3><button id="nextMonth" class="icon-btn">›</button></div>
+      <div class="weekdays"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+      <div id="calendarGrid" class="calendar-grid"></div>
+    </div>
+    <div class="panel day-panel">
+      <div class="panel-head"><div><span class="eyebrow">SELECTED DAY</span><h3 id="selectedDateTitle">Today</h3></div><button id="addDayTrade" class="primary small">＋ Add Trade</button></div>
+      <div id="daySummary" class="day-summary"></div>
+      <div id="dayTrades" class="trade-list"></div>
+      <div id="dayNotes" class="notes-box"></div>
+    </div>
+  </div>
+</section>
+
+<section id="analytics" class="page">
+  <div class="section-head"><div><h3>Analytics</h3><p>Find what actually works in your trading.</p></div></div>
+  <div class="filter-row"><label>Period<select id="analyticsPeriod"><option value="all">All time</option><option value="week">This week</option><option value="month">This month</option><option value="year">This year</option></select></label></div>
+  <div class="stats-grid analytics-stats">
+    <div class="metric"><span>Average Win</span><strong id="avgWin">—</strong></div>
+    <div class="metric"><span>Average Loss</span><strong id="avgLoss">—</strong></div>
+    <div class="metric"><span>Profit Factor</span><strong id="profitFactor">—</strong></div>
+    <div class="metric"><span>Best Trade</span><strong id="bestTrade">—</strong></div>
+    <div class="metric"><span>Worst Trade</span><strong id="worstTrade">—</strong></div>
+    <div class="metric"><span>Net P&L</span><strong id="analyticsPnl">—</strong></div>
+  </div>
+  <div class="two-col">
+    <div class="panel"><div class="panel-head"><div><h3>Instrument Performance</h3><p>Net P&L by instrument</p></div></div><div id="instrumentTable"></div></div>
+    <div class="panel"><div class="panel-head"><div><h3>Strategy Performance</h3><p>Net P&L by setup</p></div></div><div id="strategyTable"></div></div>
+  </div>
+</section>
+
+<section id="reports" class="page">
+  <div class="section-head"><div><h3>Reports</h3><p>Export weekly, monthly and yearly performance.</p></div><button id="exportAllPdf" class="primary">Export All → PDF</button></div>
+  <div class="report-tabs"><button class="report-tab active" data-report="week">Weekly</button><button class="report-tab" data-report="month">Monthly</button><button class="report-tab" data-report="year">Yearly</button></div>
+  <div class="report-controls"><button id="reportPrev" class="icon-btn">‹</button><h3 id="reportPeriodLabel"></h3><button id="reportNext" class="icon-btn">›</button><button id="exportPng" class="ghost">Export PNG</button></div>
+  <div id="reportCard" class="report-card"></div>
+</section>
+
+<section id="settings" class="page">
+  <div class="section-head"><div><h3>Settings</h3><p>Account preferences and backups.</p></div></div>
+  <div class="two-col">
+    <div class="panel"><h3>Account</h3><form id="settingsForm" class="settings-form">
+      <label>Initial Capital<input id="setCapital" type="number" step="0.01" min="0.01" required></label>
+      <label>Currency<select id="setCurrency"><option>USD</option><option>INR</option><option>EUR</option><option>GBP</option><option>USDT</option><option>AUD</option><option>CAD</option><option>JPY</option></select></label>
+      <label>Trading Type<select id="setMarket"><option>Forex</option><option>Crypto</option><option>Stocks</option><option>Index</option><option>Commodities</option><option>Options</option><option>Other</option></select></label>
+      <button class="primary">Save Settings</button>
+    </form></div>
+    <div class="panel"><h3>Backup</h3><p class="muted">Export your complete journal before clearing browser data or moving devices.</p><div class="backup-actions"><button id="exportJson" class="ghost">Export Journal JSON</button><label class="file-btn">Import JSON<input id="importJson" type="file" accept=".json"></label></div><hr><button id="clearData" class="danger">Clear All Journal Data</button></div>
+  </div>
+</section>
+
+<section class="page" id="about">
+  <div class="about-hero">
+    <div class="about-cover-glow"></div>
+    <div class="about-profile">
+      <div class="about-photo-wrap">
+        <span class="photo-orbit photo-orbit-one"></span>
+        <span class="photo-orbit photo-orbit-two"></span>
+        <span class="photo-halo"></span>
+        <img src="Trade With Avinash.jpeg" alt="Avinash Ram" class="about-photo">
+        <span class="about-role-badge">Founder &amp; Developer</span>
+        <span class="about-verified" title="Verified Developer">✓</span>
+        <span class="about-online" title="Developer"></span>
+      </div>
+      <div class="about-heading">
+        <div class="about-brand-mark"><span>MJ</span><em>MAKE JOURNAL</em></div>
+        <div class="eyebrow">ABOUT THE DEVELOPER</div>
+        <h1>Avinash Ram <span class="verified-name">✓</span></h1>
+        <p>Founder, Developer &amp; CEO</p>
+        <div class="about-badges">
+          <span>Finance</span><span>Financial Markets</span><span>Technology</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="about-grid">
+    <article class="about-card about-bio">
+      <div class="about-card-head">
+        <span class="about-icon">✦</span>
+        <div><span class="eyebrow">PROFILE</span><h3>About Developer</h3></div>
+      </div>
+      <p>Avinash Ram is a developer with a primary focus on Finance and Financial Markets. He builds websites and applications to make financial concepts, tools, and everyday financial tasks simpler, more practical, and easier to use.</p>
+      <p>His work combines finance and technology to create useful digital solutions.</p>
+    </article>
+
+    <article class="about-card">
+      <div class="about-card-head">
+        <span class="about-icon">⌁</span>
+        <div><span class="eyebrow">CONTACT</span><h3>Get in Touch</h3></div>
+      </div>
+      <div class="about-links">
+        <a href="tel:+919508396373" class="about-link"><span>☎</span><div><small>Mobile</small><strong>+91 9508396373</strong></div></a>
+        <a href="mailto:blackrock9508@gmail.com" class="about-link"><span>✉</span><div><small>Email</small><strong>blackrock9508@gmail.com</strong></div></a>
+        <a href="https://avinashram.netlify.app/" target="_blank" rel="noopener" class="about-link"><span>↗</span><div><small>Website</small><strong>avinashram.netlify.app</strong></div></a>
+      </div>
+    </article>
+
+    <article class="about-card">
+      <div class="about-card-head">
+        <span class="about-icon">◎</span>
+        <div><span class="eyebrow">SOCIAL</span><h3>Connect</h3></div>
+      </div>
+      <div class="social-grid">
+        <a href="https://instagram.com/avinash_kumar9508" target="_blank" rel="noopener" class="social-card"><span>◎</span><div><strong>Instagram</strong><small>@avinash_kumar9508</small></div></a>
+        <a href="https://t.me/+919508396373" target="_blank" rel="noopener" class="social-card"><span>➤</span><div><strong>Telegram</strong><small>+91 9508396373</small></div></a>
+      </div>
+    </article>
+
+    <article class="about-card about-app-card">
+      <div>
+        <span class="eyebrow">APPLICATION</span>
+        <h3>Make Journal</h3>
+        <p>Trading &amp; Financial Journal</p>
+      </div>
+      <div class="app-meta">
+        <div><small>Version</small><strong>v1.4.4</strong></div>
+        <div><small>Created by</small><strong>Avinash Ram</strong></div>
+        <div><small>Copyright</small><strong>© 2026 Avinash Ram</strong></div>
+      </div>
+    </article>
+  </div>
+
+  <div class="about-footer">
+    <span>MAKE JOURNAL</span><i></i><span>CRAFTED WITH FINANCE × TECHNOLOGY</span>
+  </div>
+</section>
+</main>
+</div>
+
+<div id="tradeModal" class="modal hidden">
+  <div class="modal-card large">
+    <div class="modal-head"><div><span class="eyebrow">TRADE ENTRY</span><h2 id="tradeModalTitle">New Trade</h2></div><button class="close" data-close="tradeModal">×</button></div>
+    <form id="tradeForm">
+      <input type="hidden" id="tradeId"><input type="hidden" id="tradeDate">
+      <div class="form-grid">
+        <label>Instrument<input id="instrument" required placeholder="Type: XAUUSD, NIFTY 50, BTCUSDT..."></label>
+        <label>Direction<select id="direction"><option>BUY</option><option>SELL</option></select></label>
+        <label>Lot / Quantity<input id="quantity" type="number" step="any" min="0" placeholder="0.10" required></label>
+        <label>Entry Price<input id="entry" type="number" step="any" required></label>
+        <label>Exit Price<input id="exit" type="number" step="any"></label>
+        <label>Entry Time<div class="time-pair"><input id="entryTime" type="text" inputmode="numeric" placeholder="08:30" maxlength="5"><select id="entryAmPm"><option>AM</option><option>PM</option></select></div></label>
+        <label>Exit Time<div class="time-pair"><input id="exitTime" type="text" inputmode="numeric" placeholder="03:45" maxlength="5"><select id="exitAmPm"><option>AM</option><option>PM</option></select></div></label>
+        <label>Stop Loss<input id="sl" type="number" step="any"></label>
+        <label>Target<input id="target" type="number" step="any"></label>
+        <label>Planned R:R<input id="plannedRR" placeholder="1:2"></label>
+        <label>Entry Mode<select id="entryMode"><option value="full">Full Journal</option><option value="quick">Quick Result</option></select></label><label>Result<select id="result"><option value="win">Win</option><option value="loss">Loss</option><option value="be">Breakeven</option></select></label>
+        <label>Gross P&L<input id="grossPnl" type="number" step="0.01" placeholder="25"></label>
+        <label>Fees / Commission<input id="fees" type="number" step="0.01" value="0"></label>
+        <label>Strategy / Setup<input id="strategy" list="strategySuggestions" placeholder="Breakout, Pullback..."><datalist id="strategySuggestions"><option>Breakout</option><option>Pullback</option><option>Support/Resistance</option><option>Trend Following</option><option>Reversal</option><option>Scalping</option></datalist></label>
+      </div>
+      <div id="quickModeNote" class="quick-note hidden">Quick Result mode: only the instrument, result, P&amp;L and optional strategy are needed. Use this when you only want to track your strategy win rate.</div><div class="section-form"><h3>Trade Logic</h3><textarea id="logic" placeholder="Why did you take this trade? Market condition, setup, confirmation..."></textarea></div>
+      <div class="section-form"><h3>Trade Learning</h3><textarea id="learning" placeholder="What went right, what went wrong, and what will you change?"></textarea></div>
+      <div class="section-form"><h3>Rule Violations</h3><div class="checks"><label><input type="checkbox" value="FOMO"> FOMO</label><label><input type="checkbox" value="Revenge trading"> Revenge trading</label><label><input type="checkbox" value="Overtrading"> Overtrading</label><label><input type="checkbox" value="Early exit"> Early exit</label><label><input type="checkbox" value="Late entry"> Late entry</label><label><input type="checkbox" value="Moved SL"> Moved SL</label><label><input type="checkbox" value="Setup violation"> Setup violation</label><label><input type="checkbox" value="Risk violation"> Risk violation</label></div></div>
+      <div class="section-form"><h3>Trade Evidence <span class="muted small-text">(optional)</span></h3><div class="upload-grid">
+        <label class="upload-box">📈<strong>Entry Screenshot</strong><small>Before entering</small><input id="entryShot" type="file" accept="image/*"></label>
+        <label class="upload-box">📉<strong>Exit Screenshot</strong><small>After closing</small><input id="exitShot" type="file" accept="image/*"></label>
+        <label class="upload-box">💰<strong>P&L Screenshot</strong><small>Profit / loss proof</small><input id="pnlShot" type="file" accept="image/*"></label>
+      </div><div id="existingShots" class="existing-shots"></div></div>
+      <div class="modal-actions"><button type="button" class="ghost" data-close="tradeModal">Cancel</button><button class="primary">Save Trade</button></div>
+    </form>
+  </div>
+</div>
+
+<div id="dayModal" class="modal hidden"><div class="modal-card"><div class="modal-head"><div><span class="eyebrow">DAILY JOURNAL</span><h2 id="dayModalTitle"></h2></div><button class="close" data-close="dayModal">×</button></div><form id="dayForm"><label>Daily Reflection<textarea id="dailyNotes" rows="7" placeholder="What did you observe today? What will you improve?"></textarea></label><div class="modal-actions"><button type="button" class="ghost" data-close="dayModal">Cancel</button><button class="primary">Save Day</button></div></form></div></div>
+
+<div id="imageModal" class="modal hidden"><div class="image-viewer"><button class="close" data-close="imageModal">×</button><img id="viewerImage"></div></div>
+
+<div id="toast"></div>
+<script src="script.js"></script>
+</body>
+</html>
