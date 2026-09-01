@@ -32,7 +32,7 @@
 
 <button id="mobileMoreToggle" type="button" aria-label="Open More menu" aria-expanded="false"><span></span><span></span><span></span></button><div id="mobileMorePanel" class="mobile-more-panel" aria-hidden="true"><div class="more-title"><span>Navigate</span><button id="closeMore" type="button">×</button></div><div class="more-grid"></div></div><button id="floatingTrade" class="floating-trade" type="button" aria-label="New Trade"><span>+</span><b>Trade</b></button><div class="app-shell">
 <aside class="sidebar">
-  <div class="logo"><img src="make-journal-logo.png" alt="Make Journal Trades logo"><div><strong>Make Journal</strong><small>Track. Analyze. Improve</small></div></div>
+  <div class="logo"><span>MJ</span><div><strong>Make Journal</strong><small>Track. Analyze. Improve</small></div></div>
   <nav>
     <button data-page="dashboard" class="nav-btn active">⌂ <span>Dashboard</span></button>
     <button data-page="calendar" class="nav-btn">▦ <span>Calendar</span></button>
@@ -60,10 +60,20 @@
     <div class="stat-card"><span>Initial Capital</span><strong id="initialCapital">—</strong><small id="returnPct">—</small></div>
     <div class="stat-card"><span>Total Trades</span><strong id="totalTrades">0</strong><small id="tradingDays">0 trading days</small></div>
   </div>
+  <div class="dashboard-result-wrap">
+    <div class="result-circle-card">
+      <div class="result-circle-copy"><span class="label">TRADE RESULTS</span><h3>Performance Split</h3><p>Your Win, Loss and Breakeven distribution at a glance.</p></div>
+      <div class="result-donut" id="resultDonut" aria-label="Trade result distribution">
+        <div class="result-donut-center"><strong id="resultDonutTotal">0</strong><span>Total Trades</span></div>
+      </div>
+      <div class="result-legend">
+        <div><i class="legend-dot win-dot"></i><span>Win</span><strong id="winRate">0%</strong><small id="winCount">0 wins</small></div>
+        <div><i class="legend-dot loss-dot"></i><span>Loss</span><strong id="lossRate">0%</strong><small id="lossCount">0 losses</small></div>
+        <div><i class="legend-dot be-dot"></i><span>Breakeven</span><strong id="beRate">0%</strong><small id="beCount">0 BE</small></div>
+      </div>
+    </div>
+  </div>
   <div class="stats-grid">
-    <div class="metric"><span>Win Rate</span><strong id="winRate">0%</strong><small id="winCount">0 wins</small></div>
-    <div class="metric"><span>Loss Rate</span><strong id="lossRate">0%</strong><small id="lossCount">0 losses</small></div>
-    <div class="metric"><span>Breakeven</span><strong id="beRate">0%</strong><small id="beCount">0 BE</small></div>
     <div class="metric"><span>Gross Profit</span><strong id="grossProfit">—</strong></div>
     <div class="metric"><span>Gross Loss</span><strong id="grossLoss">—</strong></div>
     <div class="metric"><span>Max Drawdown</span><strong id="maxDrawdown">—</strong></div>
@@ -216,17 +226,12 @@
         <label>Instrument<input id="instrument" required placeholder="Type: XAUUSD, NIFTY 50, BTCUSDT..."></label>
         <label>Direction<select id="direction"><option>BUY</option><option>SELL</option></select></label>
         <label>Lot / Quantity<input id="quantity" type="number" step="any" min="0" placeholder="0.10" required></label>
-        <label>Entry Price<input id="entry" type="number" step="any" required></label>
-        <label>Exit Price<input id="exit" type="number" step="any"></label>
-        <label>Entry Time<div class="time-pair"><input id="entryTime" type="text" inputmode="numeric" placeholder="08:30" maxlength="5"><select id="entryAmPm"><option>AM</option><option>PM</option></select></div></label>
-        <label>Exit Time<div class="time-pair"><input id="exitTime" type="text" inputmode="numeric" placeholder="03:45" maxlength="5"><select id="exitAmPm"><option>AM</option><option>PM</option></select></div></label>
-        <label>Stop Loss<input id="sl" type="number" step="any"></label>
-        <label>Target<input id="target" type="number" step="any"></label>
-        <label>Planned R:R<input id="plannedRR" placeholder="1:2"></label>
-        <label>Entry Mode<select id="entryMode"><option value="full">Full Journal</option><option value="quick">Quick Result</option></select></label><label>Result<select id="result"><option value="win">Win</option><option value="loss">Loss</option><option value="be">Breakeven</option></select></label>
-        <label>Gross P&L<input id="grossPnl" type="number" step="0.01" placeholder="25"></label>
-        <label>Fees / Commission<input id="fees" type="number" step="0.01" value="0"></label>
-        <label>Strategy / Setup<input id="strategy" list="strategySuggestions" placeholder="Breakout, Pullback..."><datalist id="strategySuggestions"><option>Breakout</option><option>Pullback</option><option>Support/Resistance</option><option>Trend Following</option><option>Reversal</option><option>Scalping</option></datalist></label>
+        <label>Entry Time <small>(Optional)</small><div class="time-pair"><input id="entryTime" type="time"><select id="entryAmPm"><option>AM</option><option selected>PM</option></select></div></label>
+        <label>Exit Time <small>(Optional)</small><div class="time-pair"><input id="exitTime" type="time"><select id="exitAmPm"><option>AM</option><option selected>PM</option></select></div></label>
+        <label>Planned R:R<div class="rr-input"><span>1 :</span><input id="plannedRR" type="number" min="0.1" step="0.1" placeholder="4"></div></label>
+        <label>Result<select id="result"><option value="win">Win</option><option value="loss">Loss</option><option value="be">Breakeven</option></select></label>
+        <label>Gross P&L<input id="grossPnl" type="number" step="any" placeholder="0.00"></label>
+        <label>Fees<input id="fees" type="number" step="any" min="0" value="0"></label>
       </div>
       <div id="quickModeNote" class="quick-note hidden">Quick Result mode: only the instrument, result, P&amp;L and optional strategy are needed. Use this when you only want to track your strategy win rate.</div><div class="section-form"><h3>Trade Logic</h3><textarea id="logic" placeholder="Why did you take this trade? Market condition, setup, confirmation..."></textarea></div>
       <div class="section-form"><h3>Trade Learning</h3><textarea id="learning" placeholder="What went right, what went wrong, and what will you change?"></textarea></div>

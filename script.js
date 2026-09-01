@@ -1,3 +1,77 @@
+/* Make Journal — Firebase Cloud Sync */
+const firebaseConfig = {
+  apiKey: "AIzaSyBHZbXj8amkMWI541cC7xWwk3sykDXkJeI",
+  authDomain: "make-journal.firebaseapp.com",
+  projectId: "make-journal",
+  storageBucket: "make-journal.firebasestorage.app",
+  messagingSenderId: "167986424239",
+  appId: "1:167986424239:web:fd95680664cd0329caa75a",
+  measurementId: "G-8Q33YEE9T0"
+};
+let firebaseReady=false, authUser=null, cloudApplying=false, cloudTimer=null;
+try {
+  if(window.firebase){
+    if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    window.mjAuth=firebase.auth();
+    window.mjDb=firebase.firestore();
+    firebaseReady=true;
+  }
+} catch(err){ console.warn("Firebase unavailable; local mode remains active.",err); }
+function cloudState(){
+  return {setup:!!state.setup,settings:{...state.settings},trades:state.trades.map(t=>{const x={...t};delete x.entryShot;delete x.exitShot;delete x.pnlShot;return x}),days:{...state.days}};
+}
+function queueCloudSync(){
+  if(!firebaseReady||!authUser||cloudApplying)return;
+  clearTimeout(cloudTimer); cloudTimer=setTimeout(()=>syncCloud(),700);
+}
+async function syncCloud(){
+  if(!firebaseReady||!authUser||cloudApplying)return;
+  try{
+    const ref=mjDb.collection("users").doc(authUser.uid);
+    await ref.set({profile:{uid:authUser.uid,name:authUser.displayName||"",email:authUser.email||"",photoURL:authUser.photoURL||""},settings:state.settings,setup:!!state.setup,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+    const batch=mjDb.batch();
+    state.trades.forEach(t=>{const x={...t};delete x.entryShot;delete x.exitShot;delete x.pnlShot;batch.set(ref.collection("trades").doc(t.id),x,{merge:true})});
+    Object.entries(state.days).forEach(([id,v])=>batch.set(ref.collection("days").doc(id),v,{merge:true}));
+    await batch.commit();
+    toast("☁ Synced to your account");
+  }catch(err){console.error(err);toast("Cloud sync failed — local data is safe")}
+}
+async function loadCloudForUser(user){
+  if(!firebaseReady||!user)return;
+  cloudApplying=true;
+  try{
+    const ref=mjDb.collection("users").doc(user.uid), snap=await ref.get();
+    const tradeSnap=await ref.collection("trades").get(), daySnap=await ref.collection("days").get();
+    const hasCloud=snap.exists || !tradeSnap.empty || !daySnap.empty;
+    if(!hasCloud){ cloudApplying=false; await syncCloud(); cloudApplying=true; return; }
+    const oldShots=Object.fromEntries(state.trades.map(t=>[t.id,{entryShot:t.entryShot,exitShot:t.exitShot,pnlShot:t.pnlShot}]));
+    const cloudTrades=tradeSnap.docs.map(d=>d.data()).map(t=>({...t,...(oldShots[t.id]||{})}));
+    if(snap.exists){const d=snap.data(); if(d.settings)state.settings={...state.settings,...d.settings}; if(typeof d.setup!=="undefined")state.setup=!!d.setup}
+    state.trades=cloudTrades; state.days={}; daySnap.forEach(d=>state.days[d.id]=d.data());
+    localStorage.setItem(KEY,JSON.stringify(state)); renderAll(); toast("☁ Journal synced");
+  }catch(err){console.error(err);toast("Could not load cloud journal; using local data");}
+  finally{cloudApplying=false;}
+}
+function openAuth(){
+  $("authOverlay")?.classList.remove("hidden"); $("authOverlay")?.setAttribute("aria-hidden","false");
+}
+function closeAuth(){
+  $("authOverlay")?.classList.add("hidden"); $("authOverlay")?.setAttribute("aria-hidden","true");
+}
+function updateAccountUI(){
+  const label=$("accountLabel"), avatar=$("accountAvatar"), text=$("cloudAccountText"), btn=$("settingsAccountBtn");
+  if(!label)return;
+  if(authUser){label.textContent=authUser.displayName||authUser.email||"Account"; avatar.textContent="✓"; text.textContent=`Signed in as ${authUser.email||"your Google account"}. Cloud sync is active.`; btn.textContent="Sign out";}
+  else{label.textContent="Sign in";avatar.textContent="◎";text.textContent="Not signed in. Your journal is currently stored on this device.";btn.textContent="Sign in with Google";}
+}
+function accountAction(){
+  if(authUser){ if(confirm("Sign out of Make Journal? Your local journal will remain on this device.")){mjAuth.signOut();} }
+  else openAuth();
+}
+if(firebaseReady){
+  mjAuth.onAuthStateChanged(async user=>{authUser=user||null;updateAccountUI();if(user){closeAuth();await loadCloudForUser(user)}});
+}
+
 const KEY="tradingJournalV1";
 let state=JSON.parse(localStorage.getItem(KEY)||"null")||{setup:false,settings:{capital:0,currency:"USD",market:"Forex"},trades:[],days:{}};
 let calDate=new Date(), selectedDate=localDate(), reportType="week", reportCursor=new Date();
@@ -5,7 +79,7 @@ let calDate=new Date(), selectedDate=localDate(), reportType="week", reportCurso
 const $=id=>document.getElementById(id);
 const today=new Date();
 function localDate(d=new Date()){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
-function save(){localStorage.setItem(KEY,JSON.stringify(state))}
+function save(){localStorage.setItem(KEY,JSON.stringify(state));queueCloudSync()}
 function money(n){n=Number(n||0);return `${state.settings.currency} ${n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`}
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
 function toast(t){let x=$("toast");x.textContent=t;x.classList.add("show");setTimeout(()=>x.classList.remove("show"),2200)}
@@ -15,10 +89,9 @@ function tradesFor(d){return state.trades.filter(t=>t.date===d)}
 function net(t){return Number(t.grossPnl||0)-Number(t.fees||0)}
 function allNet(){return state.trades.reduce((a,t)=>a+net(t),0)}
 function showPage(page){
- window.closeMobileMore?.();
  document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));$(page).classList.add("active");
  document.querySelectorAll(".nav-btn").forEach(x=>x.classList.toggle("active",x.dataset.page===page));
- const titles={dashboard:"Dashboard",calendar:"Calendar",analytics:"Analytics",reports:"Reports",settings:"Settings"};$("pageTitle").textContent=titles[page];
+ const titles={dashboard:"Dashboard",calendar:"Calendar",analytics:"Analytics",reports:"Reports",about:"About Developer",settings:"Settings"};$("pageTitle").textContent=titles[page];
  if(page==="dashboard")renderDashboard(); if(page==="calendar")renderCalendar(); if(page==="analytics")renderAnalytics(); if(page==="reports")renderReport(); if(page==="settings")renderSettings();
 }
 document.querySelectorAll(".nav-btn").forEach(b=>b.onclick=()=>showPage(b.dataset.page));
@@ -28,6 +101,84 @@ $("addDayTrade").onclick=()=>openTrade(selectedDate);
 $("todayBtn").onclick=()=>{calDate=new Date();selectedDate=localDate();renderCalendar()}
 $("prevMonth").onclick=()=>{calDate.setMonth(calDate.getMonth()-1);renderCalendar()}
 $("nextMonth").onclick=()=>{calDate.setMonth(calDate.getMonth()+1);renderCalendar()}
+
+$("accountBtn")?.addEventListener("click",accountAction);
+$("settingsAccountBtn")?.addEventListener("click",accountAction);
+$("authClose")?.addEventListener("click",closeAuth);
+$("continueLocal")?.addEventListener("click",closeAuth);
+function authErrorMessage(err){
+  const code=err?.code||"";
+  const map={
+    "auth/unauthorized-domain":"This website is not authorized in Firebase. Add its domain under Authentication → Settings → Authorized domains.",
+    "auth/operation-not-supported-in-this-environment":"Google sign-in cannot run from a local file. Open Make Journal through http://localhost or Firebase Hosting.",
+    "auth/unauthorized-domain":"This web address is not authorized in Firebase. Add the current domain in Firebase Console → Authentication → Settings → Authorized domains.",
+    "auth/internal-error":"Firebase could not complete Google sign-in. Check Authorized domains and try again.",
+    "auth/popup-blocked":"Your browser blocked the Google sign-in popup. Allow popups for this site or use the redirect option.",
+    "auth/popup-closed-by-user":"Sign-in was cancelled.",
+    "auth/account-exists-with-different-credential":"An account already exists with this email using another sign-in method.",
+    "auth/email-already-in-use":"This email already has an account. Use Log in instead.",
+    "auth/invalid-email":"Please enter a valid email address.",
+    "auth/weak-password":"Password must be at least 6 characters.",
+    "auth/user-not-found":"No account was found for this email.",
+    "auth/wrong-password":"Incorrect password. Try again or use Google sign-in.",
+    "auth/invalid-credential":"Email or password is incorrect."
+  };
+  return map[code]||`Sign-in failed (${code||"unknown error"}). Please try again.`;
+}
+async function googleLogin(){
+  if(!firebaseReady){
+    $("authStatus").textContent="Firebase is unavailable. Check your internet connection.";
+    return;
+  }
+  const b=$("googleSignIn");
+  b.disabled=true;
+  $("authStatus").textContent="Redirecting to Google…";
+  try{
+    const provider=new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({prompt:"select_account"});
+    if(location.protocol==='file:'){
+      throw Object.assign(new Error(),{code:'auth/operation-not-supported-in-this-environment'});
+    }
+    // Redirect is more reliable than a popup on localhost, mobile browsers and APK WebViews.
+    await mjAuth.signInWithRedirect(provider);
+  }catch(err){
+    console.error("Google auth error:",err);
+    $("authStatus").textContent=authErrorMessage(err);
+    b.disabled=false;
+  }
+}
+$("googleSignIn")?.addEventListener("click",googleLogin);
+
+// Complete a redirect sign-in after Google sends the browser back to Make Journal.
+if(firebaseReady){
+  mjAuth.getRedirectResult().then(result=>{
+    if(result?.user){
+      toast("✓ Google sign-in successful");
+    }
+  }).catch(err=>{
+    console.error("Google redirect result error:",err);
+    const status=$("authStatus");
+    if(status) status.textContent=authErrorMessage(err);
+    if(err?.code==="auth/unauthorized-domain"){
+      openAuth();
+    }
+  });
+}
+
+$("googleSignIn")?.addEventListener("click",googleLogin);
+async function emailAuth(mode){
+  const email=$("authEmail").value.trim(), password=$("authPassword").value;
+  if(!email||!password){$("authStatus").textContent="Enter your email and password first.";return;}
+  $("emailSignIn").disabled=$("emailSignUp").disabled=true;
+  $("authStatus").textContent=mode==='signup'?"Creating account…":"Logging in…";
+  try{
+    if(mode==='signup') await mjAuth.createUserWithEmailAndPassword(email,password);
+    else await mjAuth.signInWithEmailAndPassword(email,password);
+  }catch(err){console.error("Email auth error:",err);$("authStatus").textContent=authErrorMessage(err)}
+  finally{$("emailSignIn").disabled=$("emailSignUp").disabled=false;}
+}
+$("emailSignIn")?.addEventListener("click",()=>emailAuth('login'));
+$("emailSignUp")?.addEventListener("click",()=>emailAuth('signup'));
 
 function setupCheck(){
  if(!state.setup){$("setupOverlay").classList.remove("hidden")}
@@ -41,6 +192,8 @@ function renderDashboard(){
  $("totalTrades").textContent=ts.length;$("tradingDays").textContent=`${days.length} trading days`;
  $("winRate").textContent=ts.length?((w.length/ts.length)*100).toFixed(1)+"%":"0%";$("lossRate").textContent=ts.length?((l.length/ts.length)*100).toFixed(1)+"%":"0%";$("beRate").textContent=ts.length?((be.length/ts.length)*100).toFixed(1)+"%":"0%";
  $("winCount").textContent=`${w.length} wins`;$("lossCount").textContent=`${l.length} losses`;$("beCount").textContent=`${be.length} BE`;
+ const winPct=ts.length?(w.length/ts.length)*100:0, lossPct=ts.length?(l.length/ts.length)*100:0, bePct=ts.length?(be.length/ts.length)*100:0;
+ const donut=$("resultDonut"); if(donut){const a=winPct,b=winPct+lossPct,c=100; donut.style.background=ts.length?`conic-gradient(#29d17d 0 ${a}%, #ff5d6c ${a}% ${b}%, #8b9bb4 ${b}% ${c}%)`:`conic-gradient(rgba(255,255,255,.12) 0 100%)`;$("resultDonutTotal").textContent=ts.length;}
  $("grossProfit").textContent=money(ts.reduce((a,t)=>a+Math.max(0,+t.grossPnl||0),0));$("grossLoss").textContent=money(ts.reduce((a,t)=>a+Math.min(0,+t.grossPnl||0),0));
  $("maxDrawdown").textContent=money(maxDrawdown(ts));
  let recent=[...ts].sort((a,b)=>(b.created||"").localeCompare(a.created||"")).slice(0,6);
@@ -57,7 +210,7 @@ function drawEquity(){
  let c=$("equityCanvas"),ctx=c.getContext("2d"),w=c.clientWidth*2,h=260*2;c.width=w;c.height=h;ctx.clearRect(0,0,w,h);let ts=[...state.trades].sort((a,b)=>a.date.localeCompare(b.date)||(a.created||"").localeCompare(b.created||""));
  let vals=[+state.settings.capital||0],b=vals[0];ts.forEach(t=>{b+=net(t);vals.push(b)});if(vals.length<2){ctx.font="26px DM Sans";ctx.fillStyle="#999";ctx.fillText("No equity data yet",40,130);return}
  let min=Math.min(...vals),max=Math.max(...vals),pad=(max-min||1)*.15;min-=pad;max+=pad;
- ctx.beginPath();vals.forEach((v,i)=>{let x=30+i*(w-60)/(vals.length-1),y=h-30-(v-min)/(max-min)*(h-60);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.strokeStyle="#171717";ctx.lineWidth=5;ctx.stroke();
+ ctx.beginPath();vals.forEach((v,i)=>{let x=30+i*(w-60)/(vals.length-1),y=h-30-(v-min)/(max-min)*(h-60);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.shadowBlur=16;ctx.shadowColor="rgba(57,217,138,.45)";ctx.strokeStyle="#39d98a";ctx.lineWidth=7;ctx.stroke();ctx.shadowBlur=0;arr.forEach(([d,v],i)=>{let x=35+i*(w-70)/(Math.max(1,arr.length-1)),y=h-30-(v-min)/range*(h-60);ctx.beginPath();ctx.arc(x,y,7,0,Math.PI*2);ctx.fillStyle="#b8ff62";ctx.fill()});
 }
 function renderCalendar(){
  $("monthLabel").textContent=calDate.toLocaleDateString(undefined,{month:"long",year:"numeric"});
@@ -75,28 +228,28 @@ function renderDay(){
  document.querySelectorAll(".day-panel .trade-item").forEach(x=>x.onclick=()=>openTrade(x.dataset.id));
 }
 function openTrade(dateOrId){
- let t=state.trades.find(x=>x.id===dateOrId), date=t?t.date:dateOrId;
- $("tradeModalTitle").textContent=t?"Edit Trade":"New Trade";$("tradeId").value=t?.id||"";$("tradeDate").value=date;
- const fields=["instrument","direction","quantity","entry","exit","entryTime","entryAmPm","exitTime","exitAmPm","sl","target","plannedRR","entryMode","result","grossPnl","fees","strategy","logic","learning"];
- fields.forEach(k=>{$(k).value=t?.[k]??(k==="fees"?"0":k==="result"?"win":k==="entryAmPm"||k==="exitAmPm"?"PM":k==="entryMode"?"full":"")});
- document.querySelectorAll("#tradeForm .checks input").forEach(c=>c.checked=(t?.violations||[]).includes(c.value));
- $("existingShots").innerHTML=t?["entryShot","exitShot","pnlShot"].filter(k=>t[k]).map(k=>`<img class="shot-thumb" data-src="${t[k]}" title="${k}" src="${t[k]}">`).join(""):"";
- document.querySelectorAll(".shot-thumb").forEach(i=>i.onclick=()=>{$("viewerImage").src=i.dataset.src;$("imageModal").classList.remove("hidden")});
- ["entryShot","exitShot","pnlShot"].forEach(k=>$(k).value="");
- $("entryMode").dispatchEvent(new Event("change"));$("tradeModal").classList.remove("hidden");
+  let t=state.trades.find(x=>x.id===dateOrId), date=t?t.date:dateOrId;
+  $("tradeModalTitle").textContent=t?"Edit Trade":"New Trade";$("tradeId").value=t?.id||"";$("tradeDate").value=date;
+  const fields=["instrument","direction","quantity","entryTime","entryAmPm","exitTime","exitAmPm","plannedRR","result","grossPnl","fees"];
+  fields.forEach(k=>{let el=$(k); if(el) el.value=t?.[k]??(k==="fees"?"0":k==="result"?"win":k==="entryAmPm"||k==="exitAmPm"?"PM":"")});
+  // Always reset journal notes when opening a brand-new trade; only load them for an existing trade.
+  ["logic","learning"].forEach(k=>{let el=$(k); if(el) el.value=t?.[k]||""});
+  document.querySelectorAll("#tradeForm .checks input").forEach(c=>c.checked=(t?.violations||[]).includes(c.value));
+  $("tradeModal").classList.remove("hidden");
 }
 async function fileData(input){let f=input.files[0];if(!f)return null;return await new Promise((res,rej)=>{let r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f)})}
-$("entryMode").onchange=()=>{const q=$("entryMode").value==="quick";$("quickModeNote").classList.toggle("hidden",!q);["direction","quantity","entry","exit","entryTime","entryAmPm","exitTime","exitAmPm","sl","target","plannedRR"].forEach(id=>{let el=$(id);if(el)el.closest("label").style.display=q?"none":""});["logic","learning"].forEach(id=>{$(id).closest(".section-form").style.display=q?"none":""})};
 $("tradeForm").onsubmit=async e=>{
- e.preventDefault();
- if(!$("instrument").value.trim()){toast("Instrument is required");return}
- if($("entryMode").value==="full" && (!$("entry").value || !$("quantity").value)){toast("Entry and quantity are required in Full Journal mode");return}
- let id=$("tradeId").value||crypto.randomUUID(),old=state.trades.find(t=>t.id===id),t={id,date:$("tradeDate").value,created:old?.created||new Date().toISOString()};
- ["instrument","direction","quantity","entry","exit","entryTime","entryAmPm","exitTime","exitAmPm","sl","target","plannedRR","entryMode","result","grossPnl","fees","strategy","logic","learning"].forEach(k=>t[k]=$(k).value);
- t.quantity=+t.quantity||0;t.grossPnl=Math.abs(+t.grossPnl||0);if(t.result==="loss")t.grossPnl=-t.grossPnl;if(t.result==="be")t.grossPnl=0;t.fees=Math.abs(+t.fees||0);t.violations=[...document.querySelectorAll("#tradeForm .checks input:checked")].map(x=>x.value);
- t.entryShot=await fileData($("entryShot"));t.exitShot=await fileData($("exitShot"));t.pnlShot=await fileData($("pnlShot"));
- if(old){t.entryShot??=old.entryShot;t.exitShot??=old.exitShot;t.pnlShot??=old.pnlShot;state.trades=state.trades.map(x=>x.id===id?t:x)}else state.trades.push(t);
- save();closeModal("tradeModal");renderAll();toast("Trade saved");
+  e.preventDefault();
+  if(!$("instrument").value.trim()){toast("Instrument is required");return}
+  if(!$("quantity").value){toast("Quantity is required");return}
+  let id=$("tradeId").value||crypto.randomUUID(),old=state.trades.find(t=>t.id===id),t={id,date:$("tradeDate").value,created:old?.created||new Date().toISOString()};
+  ["instrument","direction","quantity","entryTime","entryAmPm","exitTime","exitAmPm","plannedRR","result","grossPnl","fees","logic","learning"].forEach(k=>{let el=$(k); if(el)t[k]=el.value});
+  t.violations=[...document.querySelectorAll("#tradeForm .checks input:checked")].map(x=>x.value);
+  t.quantity=+t.quantity||0;
+  t.grossPnl=Math.abs(+t.grossPnl||0);if(t.result==="loss")t.grossPnl=-t.grossPnl;if(t.result==="be")t.grossPnl=0;
+  t.fees=Math.abs(+t.fees||0);
+  if(old)state.trades=state.trades.map(x=>x.id===id?{...old,...t}:x);else state.trades.push(t);
+  save();closeModal("tradeModal");renderAll();toast("Trade saved");
 }
 function closeModal(id){$(id).classList.add("hidden")}
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>closeModal(b.dataset.close));
@@ -132,9 +285,9 @@ $("reportNext").onclick=()=>{if(reportType==="week")reportCursor.setDate(reportC
 document.querySelectorAll(".report-tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".report-tab").forEach(x=>x.classList.remove("active"));b.classList.add("active");reportType=b.dataset.report;renderReport()})
 function drawReportChart(ts){
  let c=$("reportChart");if(!c)return;let ctx=c.getContext("2d"),w=c.clientWidth*2,h=230*2;c.width=w;c.height=h;let map={};ts.forEach(t=>map[t.date]=(map[t.date]||0)+net(t));let arr=Object.entries(map).sort();if(!arr.length){ctx.font="25px DM Sans";ctx.fillStyle="#999";ctx.fillText("No trades in this period",35,115);return}
- let vals=arr.map(x=>x[1]),max=Math.max(...vals,0),min=Math.min(...vals,0),range=max-min||1;ctx.beginPath();arr.forEach(([d,v],i)=>{let x=35+i*(w-70)/(Math.max(1,arr.length-1)),y=h-30-(v-min)/range*(h-60);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.strokeStyle="#171717";ctx.lineWidth=5;ctx.stroke();
+ let vals=arr.map(x=>x[1]),max=Math.max(...vals,0),min=Math.min(...vals,0),range=max-min||1;ctx.beginPath();arr.forEach(([d,v],i)=>{let x=35+i*(w-70)/(Math.max(1,arr.length-1)),y=h-30-(v-min)/range*(h-60);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.shadowBlur=16;ctx.shadowColor="rgba(57,217,138,.45)";ctx.strokeStyle="#39d98a";ctx.lineWidth=7;ctx.stroke();ctx.shadowBlur=0;arr.forEach(([d,v],i)=>{let x=35+i*(w-70)/(Math.max(1,arr.length-1)),y=h-30-(v-min)/range*(h-60);ctx.beginPath();ctx.arc(x,y,7,0,Math.PI*2);ctx.fillStyle="#b8ff62";ctx.fill()});
 }
-function renderSettings(){$("setCapital").value=state.settings.capital;$("setCurrency").value=state.settings.currency;$("setMarket").value=state.settings.market}
+function renderSettings(){$("setCapital").value=state.settings.capital;$("setCurrency").value=state.settings.currency;$("setMarket").value=state.settings.market;updateAccountUI()}
 $("settingsForm").onsubmit=e=>{e.preventDefault();state.settings={capital:+$("setCapital").value,currency:$("setCurrency").value,market:$("setMarket").value};save();renderAll();toast("Settings saved")}
 $("exportJson").onclick=()=>download("trading-journal-backup.json",JSON.stringify(state,null,2),"application/json");
 $("importJson").onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{state=JSON.parse(r.result);save();renderAll();toast("Journal imported")}catch{toast("Invalid JSON file")}};r.readAsText(f)}
@@ -262,48 +415,22 @@ setTimeout(premiumEquityGlow,400);
   setTimeout(render,900);
 })();
 
-/* Robust mobile hamburger/menu controller — preserves the original interface. */
 (function(){
   const panel=document.getElementById("mobileMorePanel"), grid=panel?.querySelector(".more-grid"), close=document.getElementById("closeMore"), toggle=document.getElementById("mobileMoreToggle");
   if(!panel||!grid||!toggle) return;
   const nav=[...document.querySelectorAll(".sidebar .nav-btn")];
   const labels={dashboard:["⌂","Dashboard","Overview & P&L"],calendar:["▦","Calendar","Daily journal"],analytics:["◒","Analytics","Performance insights"],reports:["▤","Reports","Weekly, monthly & yearly"],about:["◉","About Developer","Developer & app info"],settings:["⚙","Settings","App preferences"]};
-  let suppressClick=false;
   nav.forEach(b=>{
     const page=b.dataset.page, d=labels[page]||["•",b.textContent.trim(),"Open section"];
     const c=document.createElement("button"); c.className="more-card"; c.type="button"; c.dataset.page=page;
     c.innerHTML='<span class="more-icon">'+d[0]+'</span><strong>'+d[1]+'</strong><small>'+d[2]+'</small>';
     c.addEventListener("click",()=>{b.click();shut()}); grid.appendChild(c);
   });
-  function sync(opened){
-    panel.classList.toggle("show",opened);
-    panel.setAttribute("aria-hidden",String(!opened));
-    toggle.setAttribute("aria-expanded",String(opened));
-    toggle.classList.toggle("open",opened);
-  }
-  function open(){sync(true)}
-  function shut(){sync(false)}
-  window.closeMobileMore=shut;
-  toggle.addEventListener("pointerdown",e=>{
-    if(e.pointerType!=="mouse" || e.button===0){
-      e.preventDefault(); e.stopPropagation(); suppressClick=true;
-      panel.classList.contains("show")?shut():open();
-      setTimeout(()=>{suppressClick=false},400);
-    }
-  },{passive:false});
-  toggle.addEventListener("click",e=>{
-    e.preventDefault(); e.stopPropagation();
-    if(suppressClick) return;
-    panel.classList.contains("show")?shut():open();
-  });
+  function open(){panel.classList.add("show");panel.setAttribute("aria-hidden","false");toggle.setAttribute("aria-expanded","true");toggle.classList.add("open");}
+  function shut(){panel.classList.remove("show");panel.setAttribute("aria-hidden","true");toggle.setAttribute("aria-expanded","false");toggle.classList.remove("open");}
+  toggle.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();panel.classList.contains("show")?shut():open()});
   close?.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();shut()});
-  document.addEventListener("pointerdown",e=>{
-    if(panel.classList.contains("show")&&!panel.contains(e.target)&&!toggle.contains(e.target)) shut();
-  },true);
-  document.addEventListener("keydown",e=>{
-    if(e.key==="Escape"&&panel.classList.contains("show")){e.preventDefault();shut();toggle.focus();}
-  });
-  window.addEventListener("resize",()=>{if(window.innerWidth>760) shut()},{passive:true});
+  document.addEventListener("click",e=>{if(panel.classList.contains("show")&&!panel.contains(e.target)&&!toggle.contains(e.target)) shut()});
 })();
 
 // V6 About Developer: navigation fallback.
